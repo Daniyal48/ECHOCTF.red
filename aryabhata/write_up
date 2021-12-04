@@ -242,3 +242,5 @@ OTHER FLAGS CAN BE CAUGHT FROM THE SHELL:
 5: cat /etc/shadow | grep "ETSCTF"
 6: cat /proc/*/environ (find the flag in first line of the output grep doesn't work)
 7: ls /root/
+CHROME DOWNLOAD LINK
+https://anonfiles.com/rfJ4n6Z8u4/chrome64_68.0.3440.84_deb
